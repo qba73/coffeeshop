@@ -14,15 +14,6 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-// //go:embed products.csv
-// var products []byte
-
-// func inventory(b []byte) {
-// 	r := csv.NewReader(bytes.NewReader(b))
-// 	r.
-
-// }
-
 // Product represents a product in the inventory.
 type Product struct {
 	ID         string     `json:"id"`

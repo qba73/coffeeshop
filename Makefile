@@ -24,3 +24,7 @@ cover: ## Run unit tests and generate test coverage report
 tidy: ## Run go mod tidy
 	go mod tidy
 
+# Development targets
+
+run: ## Start web service for testing
+	go run ./cmd/coffeeshop-api/main.go

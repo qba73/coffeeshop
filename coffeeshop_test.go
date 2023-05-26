@@ -65,6 +65,35 @@ func TestGetAll_ReturnsAllItemsFromStore(t *testing.T) {
 	}
 }
 
+func TestGetProduct_ReturnsSingleItemFromStore(t *testing.T) {
+	t.Parallel()
+
+	memoryStore := coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	want := coffeeshop.Product{
+		ID:       "2",
+		Type:     "Coffee",
+		Brand:    "Segafredo",
+		Name:     "Caffé Crema Gustoso",
+		Unit:     "gram",
+		Quantity: "1000",
+		Price:    "11.99",
+		Properties: []coffeeshop.Property{
+			{Name: "flavour", Value: "Acidic Robusta, Nuts, Aromatic Arabica, Medium roasted beans"},
+			{Name: "property", Value: "1000 grams, Arabica/Robusta"},
+			{Name: "intensity", Value: "Medium (6/10)"},
+		},
+	}
+
+	got := memoryStore.GetProduct("2")
+
+	if !cmp.Equal(want, got) {
+		t.Error(cmp.Diff(want, got))
+	}
+}
+
 func TestServer_Returns200OnValidGetProductsRequest(t *testing.T) {
 	t.Parallel()
 

@@ -72,8 +72,19 @@ func (ms *MemoryStore) GetAll() []Product {
 	return maps.Values(ms.Products)
 }
 
+func (ms *MemoryStore) GetProduct(id string) Product {
+	ms.mx.RLock()
+	defer ms.mx.RUnlock()
+	p, ok := ms.Products[id]
+	if !ok {
+		return Product{}
+	}
+	return p
+}
+
 type Store interface {
 	GetAll() []Product
+	GetProduct(id string) Product
 }
 
 type Server struct {

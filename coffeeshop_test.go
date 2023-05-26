@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/qba73/coffeeshop"
 )
 
@@ -59,7 +60,7 @@ func TestGetAll_ReturnsAllItemsFromStore(t *testing.T) {
 
 	got := memoryStore.GetAll()
 
-	if !cmp.Equal(want, got) {
+	if !cmp.Equal(want, got, cmpopts.SortSlices(func(i, j coffeeshop.Product) bool { return i.ID < j.ID })) {
 		t.Error(cmp.Diff(want, got))
 	}
 }

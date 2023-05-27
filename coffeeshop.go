@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"golang.org/x/exp/maps"
 )
 
@@ -72,19 +74,19 @@ func (ms *MemoryStore) GetAll() []Product {
 	return maps.Values(ms.Products)
 }
 
-func (ms *MemoryStore) GetProduct(id string) Product {
+func (ms *MemoryStore) GetProduct(id string) (Product, error) {
 	ms.mx.RLock()
 	defer ms.mx.RUnlock()
 	p, ok := ms.Products[id]
 	if !ok {
-		return Product{}
+		return Product{}, errors.New("product not found")
 	}
-	return p
+	return p, nil
 }
 
 type Store interface {
 	GetAll() []Product
-	GetProduct(id string) Product
+	GetProduct(id string) (Product, error)
 }
 
 type Server struct {
@@ -110,7 +112,9 @@ func New(addr string, store Store) *Server {
 
 func (cs *Server) ListenAndServe() error {
 	mux := chi.NewRouter()
+	mux.Use(middleware.Timeout(120 * time.Second))
 	mux.Get("/products", cs.GetProducts)
+	mux.Get("/products/{productID}", cs.GetProduct)
 	cs.HTTPServer.Handler = mux
 	return cs.HTTPServer.ListenAndServe()
 }
@@ -130,6 +134,25 @@ func (cs *Server) GetProducts(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(data); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+func (cs *Server) GetProduct(w http.ResponseWriter, r *http.Request) {
+	productID := chi.URLParam(r, "productID")
+	product, err := cs.Store.GetProduct(productID)
+	if err != nil {
+		http.Error(w, http.StatusText(404), 404)
+		return
+	}
+	data, err := json.Marshal(product)
+	if err != nil {
+		http.Error(w, http.StatusText(500), 500)
+		return
+	}
+	w.WriteHeader(200)
+	_, err = w.Write(data)
+	if err != nil {
+		http.Error(w, http.StatusText(500), 500)
 	}
 }
 

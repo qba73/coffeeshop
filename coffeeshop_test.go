@@ -87,7 +87,10 @@ func TestGetProduct_ReturnsSingleItemFromStore(t *testing.T) {
 		},
 	}
 
-	got := memoryStore.GetProduct("2")
+	got, err := memoryStore.GetProduct("2")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if !cmp.Equal(want, got) {
 		t.Error(cmp.Diff(want, got))

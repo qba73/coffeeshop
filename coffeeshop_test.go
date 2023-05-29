@@ -2,6 +2,7 @@ package coffeeshop_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net"
@@ -11,6 +12,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/qba73/coffeeshop"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 func newCoffeShopTestServer(store coffeeshop.Store, t *testing.T) *coffeeshop.Server {
@@ -113,6 +116,91 @@ func TestServer_Returns200OnValidGetProductsRequest(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Error(resp.StatusCode)
+	}
+}
+
+func TestServer_ReturnsAllProducts(t *testing.T) {
+	t.Parallel()
+
+	store := &coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	shop := newCoffeShopTestServer(store, t)
+	resp, err := http.Get(shop.URL + "products")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want HTTP 200OK, got %d", resp.StatusCode)
+	}
+
+	var got []coffeeshop.Product
+	err = json.NewDecoder(resp.Body).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := maps.Values(inventory)
+	if !cmp.Equal(want, got, cmpopts.SortSlices(func(i, j coffeeshop.Product) bool { return i.ID < j.ID })) {
+		t.Error(cmp.Diff(want, got))
+	}
+}
+
+func TestServer_Returns404OnNotExistingProduct(t *testing.T) {
+	t.Parallel()
+
+	store := &coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	shop := newCoffeShopTestServer(store, t)
+	resp, err := http.Get(shop.URL + "products/20")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("want HTTP 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestServer_ReturnsSingleProduct(t *testing.T) {
+	t.Parallel()
+
+	store := &coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	shop := newCoffeShopTestServer(store, t)
+	resp, err := http.Get(shop.URL + "products/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want HTTP 200OK, got %d", resp.StatusCode)
+	}
+
+	var got coffeeshop.Product
+	err = json.NewDecoder(resp.Body).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We need to make sure products in the inventory var are sorted for testing.
+	px := maps.Values(inventory)
+	slices.SortStableFunc(px, func(i, j coffeeshop.Product) bool { return i.ID < j.ID })
+
+	// We called GET /products/1, so we need to pick first item from the sorted slice.
+	want := px[0]
+
+	if !cmp.Equal(want, got) {
+		t.Error(cmp.Diff(want, got))
 	}
 }
 

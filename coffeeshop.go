@@ -131,7 +131,6 @@ func (cs *Server) GetProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(data); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
@@ -149,7 +148,7 @@ func (cs *Server) GetProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(500), 500)
 		return
 	}
-	w.WriteHeader(200)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err = w.Write(data)
 	if err != nil {
 		http.Error(w, http.StatusText(500), 500)

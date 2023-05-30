@@ -17,7 +17,7 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func newCoffeShopTestServer(store coffeeshop.Store, t *testing.T) *coffeeshop.Server {
+func newCoffeShopTestServer(store coffeeshop.Store, latency string, t *testing.T) *coffeeshop.Server {
 	t.Helper()
 
 	l, err := net.Listen("tcp", ":0")
@@ -27,37 +27,10 @@ func newCoffeShopTestServer(store coffeeshop.Store, t *testing.T) *coffeeshop.Se
 	defer l.Close()
 
 	addr := l.Addr().String()
-	cs := coffeeshop.New(addr, store)
-
-	go func() {
-		err := cs.ListenAndServe()
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
-		}
-	}()
-
-	// Cleanup is called after each test function.
-	// We do not need to call `defer server close` in each test function.
-	t.Cleanup(func() {
-		err := cs.Shutdown(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-	return cs
-}
-
-func newCoffeShopTestServerWithLatency(store coffeeshop.Store, latency time.Duration, t *testing.T) *coffeeshop.Server {
-	t.Helper()
-
-	l, err := net.Listen("tcp", ":0")
+	cs, err := coffeeshop.New(addr, store, coffeeshop.WithLatency(latency))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
-
-	addr := l.Addr().String()
-	cs := coffeeshop.New(addr, store, coffeeshop.WithLatency(latency))
 
 	go func() {
 		err := cs.ListenAndServe()
@@ -138,7 +111,7 @@ func TestServer_Returns200OnValidGetProductsRequest(t *testing.T) {
 		Products: inventory,
 	}
 
-	shop := newCoffeShopTestServer(store, t)
+	shop := newCoffeShopTestServer(store, "100ms", t)
 	resp, err := http.Get(shop.URL + "products")
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +130,7 @@ func TestServer_ReturnsAllProducts(t *testing.T) {
 		Products: inventory,
 	}
 
-	shop := newCoffeShopTestServer(store, t)
+	shop := newCoffeShopTestServer(store, "100ms", t)
 	resp, err := http.Get(shop.URL + "products")
 	if err != nil {
 		t.Fatal(err)
@@ -187,7 +160,7 @@ func TestServer_Returns404OnNotExistingProduct(t *testing.T) {
 		Products: inventory,
 	}
 
-	shop := newCoffeShopTestServer(store, t)
+	shop := newCoffeShopTestServer(store, "100ms", t)
 	resp, err := http.Get(shop.URL + "products/20")
 	if err != nil {
 		t.Fatal(err)
@@ -206,7 +179,7 @@ func TestServer_ReturnsSingleProduct(t *testing.T) {
 		Products: inventory,
 	}
 
-	shop := newCoffeShopTestServer(store, t)
+	shop := newCoffeShopTestServer(store, "100ms", t)
 	resp, err := http.Get(shop.URL + "products/1")
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +215,7 @@ func TestServer_ReturnsSingleProductAfterConfiguredDelay(t *testing.T) {
 		Products: inventory,
 	}
 
-	shop := newCoffeShopTestServerWithLatency(store, 2*time.Second, t)
+	shop := newCoffeShopTestServer(store, "2s", t)
 
 	start := time.Now()
 	resp, err := http.Get(shop.URL + "products/2")

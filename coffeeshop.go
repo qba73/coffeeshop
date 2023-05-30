@@ -90,22 +90,19 @@ type Store interface {
 	GetProduct(id string) (Product, error)
 }
 
-func getEnv(key, fallback string) string {
+func latencyFromEnv(key, fallback string) (time.Duration, error) {
 	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
-func delayFromEnv(key string, fallback time.Duration) time.Duration {
-	if value, ok := os.LookupEnv(key); ok {
-		v, err := strconv.Atoi(value)
+		d, err := time.ParseDuration(value)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return time.Duration(v) * time.Millisecond
+		return d, nil
 	}
-	return fallback
+	d, err := time.ParseDuration(fallback)
+	if err != nil {
+		return 0, err
+	}
+	return d, nil
 }
 
 type Server struct {
@@ -115,15 +112,26 @@ type Server struct {
 	Store      Store
 }
 
-type option func(*Server)
+type option func(s *Server) error
 
-func WithLatency(d time.Duration) option {
-	return func(s *Server) {
+func WithLatency(l string) option {
+	return func(s *Server) error {
+		d, err := time.ParseDuration(l)
+		if err != nil {
+			return err
+		}
 		s.Latency = d
+		return nil
 	}
 }
 
-func New(addr string, store Store, options ...option) *Server {
+func New(addr string, store Store, options ...option) (*Server, error) {
+	latency, err := latencyFromEnv("COFFEESHOP_LATENCY", "100m")
+	if err != nil {
+		return nil, err
+
+	}
+
 	srv := Server{
 		HTTPServer: &http.Server{
 			Addr:         addr,
@@ -131,15 +139,16 @@ func New(addr string, store Store, options ...option) *Server {
 			WriteTimeout: 30 * time.Second,
 		},
 		URL:     fmt.Sprintf("http://%s/", addr),
-		Latency: delayFromEnv("COFFEESHOP_DELAY", 5*time.Millisecond),
+		Latency: latency,
 		Store:   store,
 	}
 
-	for _, o := range options {
-		o(&srv)
+	for _, opt := range options {
+		if err := opt(&srv); err != nil {
+			return nil, err
+		}
 	}
-
-	return &srv
+	return &srv, nil
 }
 
 func Delay(d time.Duration) func(next http.Handler) http.Handler {
@@ -204,7 +213,10 @@ func Run() error {
 		Products: inventory,
 	}
 	addr := fmt.Sprintf(":%s", strconv.Itoa(8080))
-	server := New(addr, &store, WithLatency(2*time.Second))
+	server, err := New(addr, &store, WithLatency("2s"))
+	if err != nil {
+		return err
+	}
 	return server.ListenAndServe()
 }
 

@@ -8,7 +8,7 @@ dox: ## Run tests with gotestdox
 	gotestdox
 
 test: ## Run tests
-	go test -race -shuffle=on
+	go test -race -shuffle=on .
 
 vet: ## Run go vet
 	go vet ./...

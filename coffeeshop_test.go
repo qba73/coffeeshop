@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -27,6 +28,36 @@ func newCoffeShopTestServer(store coffeeshop.Store, t *testing.T) *coffeeshop.Se
 
 	addr := l.Addr().String()
 	cs := coffeeshop.New(addr, store)
+
+	go func() {
+		err := cs.ListenAndServe()
+		if !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+
+	// Cleanup is called after each test function.
+	// We do not need to call `defer server close` in each test function.
+	t.Cleanup(func() {
+		err := cs.Shutdown(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	return cs
+}
+
+func newCoffeShopTestServerWithLatency(store coffeeshop.Store, latency time.Duration, t *testing.T) *coffeeshop.Server {
+	t.Helper()
+
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+
+	addr := l.Addr().String()
+	cs := coffeeshop.New(addr, store, coffeeshop.WithLatency(latency))
 
 	go func() {
 		err := cs.ListenAndServe()
@@ -201,6 +232,36 @@ func TestServer_ReturnsSingleProduct(t *testing.T) {
 
 	if !cmp.Equal(want, got) {
 		t.Error(cmp.Diff(want, got))
+	}
+}
+
+func TestServer_ReturnsSingleProductAfterConfiguredDelay(t *testing.T) {
+	t.Parallel()
+
+	store := &coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	shop := newCoffeShopTestServerWithLatency(store, 2*time.Second, t)
+
+	start := time.Now()
+	resp, err := http.Get(shop.URL + "products/2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatal(resp.StatusCode)
+	}
+
+	stop := time.Now()
+	got := stop.Sub(start)
+	want := 2 * time.Second
+	margin := 100 * time.Millisecond
+
+	if (want - got).Abs() > margin {
+		t.Error(cmp.Diff(want-got, margin))
 	}
 }
 

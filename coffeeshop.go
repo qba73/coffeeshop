@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -89,30 +90,75 @@ type Store interface {
 	GetProduct(id string) (Product, error)
 }
 
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
+func delayFromEnv(key string, fallback time.Duration) time.Duration {
+	if value, ok := os.LookupEnv(key); ok {
+		v, err := strconv.Atoi(value)
+		if err != nil {
+			panic(err)
+		}
+		return time.Duration(v) * time.Millisecond
+	}
+	return fallback
+}
+
 type Server struct {
 	HTTPServer *http.Server
 	URL        string
-	Latency    map[string]time.Duration
+	Latency    time.Duration
 	Store      Store
 }
 
-func New(addr string, store Store) *Server {
-	// set latency for endpoints
+type option func(*Server)
+
+func WithLatency(d time.Duration) option {
+	return func(s *Server) {
+		s.Latency = d
+	}
+}
+
+func New(addr string, store Store, options ...option) *Server {
 	srv := Server{
 		HTTPServer: &http.Server{
 			Addr:         addr,
-			ReadTimeout:  20 * time.Second,
-			WriteTimeout: 20 * time.Second,
+			ReadTimeout:  30 * time.Second,
+			WriteTimeout: 30 * time.Second,
 		},
-		URL:   fmt.Sprintf("http://%s/", addr),
-		Store: store,
+		URL:     fmt.Sprintf("http://%s/", addr),
+		Latency: delayFromEnv("COFFEESHOP_DELAY", 5*time.Millisecond),
+		Store:   store,
 	}
+
+	for _, o := range options {
+		o(&srv)
+	}
+
 	return &srv
+}
+
+func Delay(d time.Duration) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(d)
+			next.ServeHTTP(w, r)
+		}
+		return http.HandlerFunc(fn)
+	}
 }
 
 func (cs *Server) ListenAndServe() error {
 	mux := chi.NewRouter()
-	mux.Use(middleware.Timeout(120 * time.Second))
+	mux.Use(
+		middleware.Timeout(120*time.Second),
+		middleware.SetHeader("Content-Type", "application/json; charset=utf-8"),
+		Delay(cs.Latency),
+	)
 	mux.Get("/products", cs.GetProducts)
 	mux.Get("/products/{productID}", cs.GetProduct)
 	cs.HTTPServer.Handler = mux
@@ -130,7 +176,6 @@ func (cs *Server) GetProducts(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if _, err := w.Write(data); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
@@ -140,18 +185,17 @@ func (cs *Server) GetProduct(w http.ResponseWriter, r *http.Request) {
 	productID := chi.URLParam(r, "productID")
 	product, err := cs.Store.GetProduct(productID)
 	if err != nil {
-		http.Error(w, http.StatusText(404), 404)
+		http.Error(w, "product not found", http.StatusNotFound)
 		return
 	}
 	data, err := json.Marshal(product)
 	if err != nil {
-		http.Error(w, http.StatusText(500), 500)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err = w.Write(data)
 	if err != nil {
-		http.Error(w, http.StatusText(500), 500)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
 
@@ -160,7 +204,7 @@ func Run() error {
 		Products: inventory,
 	}
 	addr := fmt.Sprintf(":%s", strconv.Itoa(8080))
-	server := New(addr, &store)
+	server := New(addr, &store, WithLatency(2*time.Second))
 	return server.ListenAndServe()
 }
 

@@ -104,6 +104,21 @@ func TestGetProduct_ReturnsSingleItemFromStore(t *testing.T) {
 	}
 }
 
+func TestGetAllCoffeesFromStore(t *testing.T) {
+	t.Parallel()
+
+	store := coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	coffeeTypes := store.GetCoffee()
+	want := 6
+
+	if want != len(coffeeTypes) {
+		t.Errorf("want %d types of coffee, got %d", want, len(coffeeTypes))
+	}
+}
+
 func TestServer_Returns200OnValidGetProductsRequest(t *testing.T) {
 	t.Parallel()
 
@@ -238,6 +253,178 @@ func TestServer_ReturnsSingleProductAfterConfiguredDelay(t *testing.T) {
 	}
 }
 
+func TestServer_ReturnsAllTeaTypes(t *testing.T) {
+	t.Parallel()
+
+	store := &coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	shop := newCoffeShopTestServer(store, "100ms", t)
+	resp, err := http.Get(shop.URL + "products/tea")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want HTTP 200OK, got %d", resp.StatusCode)
+	}
+
+	var got []coffeeshop.Product
+	err = json.NewDecoder(resp.Body).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.SortStableFunc(got, func(i, j coffeeshop.Product) bool { return i.ID < j.ID })
+
+	want := []coffeeshop.Product{
+		{
+			ID:       "7",
+			Type:     "Tea",
+			Brand:    "Caykur",
+			Name:     "Green Tea",
+			Unit:     "gram",
+			Quantity: "150",
+			Price:    "4.99",
+		},
+		{
+			ID:       "8",
+			Type:     "Tea",
+			Brand:    "Greeting Opine",
+			Name:     "Jasmin Tea",
+			Unit:     "gram",
+			Quantity: "250",
+			Price:    "7.49",
+		},
+	}
+
+	if !cmp.Equal(want, got) {
+		t.Error(cmp.Diff(want, got))
+	}
+}
+
+func TestServer_ReturnsAllCoffeeTypes(t *testing.T) {
+	t.Parallel()
+
+	store := &coffeeshop.MemoryStore{
+		Products: inventory,
+	}
+
+	shop := newCoffeShopTestServer(store, "100ms", t)
+	resp, err := http.Get(shop.URL + "products/coffee")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want HTTP 200OK, got %d", resp.StatusCode)
+	}
+
+	var got []coffeeshop.Product
+	err = json.NewDecoder(resp.Body).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.SortStableFunc(got, func(i, j coffeeshop.Product) bool { return i.ID < j.ID })
+
+	want := []coffeeshop.Product{
+		{
+			ID:       "1",
+			Type:     "Coffee",
+			Brand:    "Segafredo",
+			Name:     "Intermezzo",
+			Unit:     "gram",
+			Quantity: "1000",
+			Price:    "7.99",
+			Properties: []coffeeshop.Property{
+				{Name: "flavour", Value: "Acidic Robusta, Nuts, Aromatic Arabica, Caramel, Medium roasted beans"},
+				{Name: "property", Value: "1000 grams, Arabica/Robusta"},
+				{Name: "intensity", Value: ""},
+			},
+		},
+
+		{
+			ID:       "2",
+			Type:     "Coffee",
+			Brand:    "Segafredo",
+			Name:     "Caffé Crema Gustoso",
+			Unit:     "gram",
+			Quantity: "1000",
+			Price:    "11.99",
+			Properties: []coffeeshop.Property{
+				{Name: "flavour", Value: "Acidic Robusta, Nuts, Aromatic Arabica, Medium roasted beans"},
+				{Name: "property", Value: "1000 grams, Arabica/Robusta"},
+				{Name: "intensity", Value: "Medium (6/10)"},
+			},
+		},
+
+		{
+			ID:       "3",
+			Type:     "Coffee",
+			Brand:    "Segafredo",
+			Name:     "Selezione Espresso",
+			Unit:     "gram",
+			Quantity: "1000",
+			Price:    "10.49",
+			Properties: []coffeeshop.Property{
+				{Name: "flavour", Value: "Dark Chocolate, Acidic Robusta, Dark roasted beans, Aromatic Arabica"},
+				{Name: "property", Value: "1000 grams, Arabica/Robusta"},
+			},
+		},
+
+		{
+			ID:       "4",
+			Type:     "Coffee",
+			Brand:    "illy",
+			Name:     "Intenso",
+			Unit:     "gram",
+			Quantity: "250",
+			Price:    "7.99",
+			Properties: []coffeeshop.Property{
+				{Name: "flavour", Value: "Fruit, Chocolate, Dark roasted beans, Bitterness"},
+				{Name: "property", Value: "250 grams, Arabica"},
+				{Name: "intensity", Value: "Very strong (9/10)"},
+			},
+		},
+
+		{
+			ID:       "5",
+			Type:     "Coffee",
+			Brand:    "illy",
+			Name:     "Guatemala",
+			Unit:     "gram",
+			Quantity: "250",
+			Price:    "7.99",
+			Properties: []coffeeshop.Property{
+				{Name: "flavour", Value: "Honey, Caramel, Sweetness"},
+				{Name: "property", Value: "250 gram, Arabica"},
+				{Name: "intensity", Value: "Medium (6/10)"},
+			},
+		},
+
+		{
+			ID:       "6",
+			Type:     "Coffee",
+			Brand:    "Lavazza",
+			Name:     "Espresso Barista Perfetto",
+			Unit:     "gram",
+			Quantity: "1000",
+			Price:    "12.99",
+			Properties: []coffeeshop.Property{
+				{Name: "flavour", Value: "Aromatic Arabica, Medium roasted beans"},
+				{Name: "property", Value: "250 gram, Arabica"},
+				{Name: "intensity", Value: "Medium (6/10)"},
+			},
+		},
+	}
+
+	if !cmp.Equal(want, got) {
+		t.Error(cmp.Diff(want, got))
+	}
+}
+
 var (
 	inventory = coffeeshop.Products{
 		"1": {
@@ -327,6 +514,26 @@ var (
 				{Name: "property", Value: "250 gram, Arabica"},
 				{Name: "intensity", Value: "Medium (6/10)"},
 			},
+		},
+
+		"7": {
+			ID:       "7",
+			Type:     "Tea",
+			Brand:    "Caykur",
+			Name:     "Green Tea",
+			Unit:     "gram",
+			Quantity: "150",
+			Price:    "4.99",
+		},
+
+		"8": {
+			ID:       "8",
+			Type:     "Tea",
+			Brand:    "Greeting Opine",
+			Name:     "Jasmin Tea",
+			Unit:     "gram",
+			Quantity: "250",
+			Price:    "7.49",
 		},
 	}
 )

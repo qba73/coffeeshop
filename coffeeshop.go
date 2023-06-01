@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,9 +86,35 @@ func (ms *MemoryStore) GetProduct(id string) (Product, error) {
 	return p, nil
 }
 
+func (ms *MemoryStore) GetCoffee() []Product {
+	ms.mx.RLock()
+	defer ms.mx.RUnlock()
+	var coffee []Product
+	for _, p := range maps.Values(ms.Products) {
+		if strings.ToLower(p.Type) == "coffee" {
+			coffee = append(coffee, p)
+		}
+	}
+	return coffee
+}
+
+func (ms *MemoryStore) GetTea() []Product {
+	ms.mx.RLock()
+	defer ms.mx.RUnlock()
+	var tea []Product
+	for _, p := range maps.Values(ms.Products) {
+		if strings.ToLower(p.Type) == "tea" {
+			tea = append(tea, p)
+		}
+	}
+	return tea
+}
+
 type Store interface {
 	GetAll() []Product
 	GetProduct(id string) (Product, error)
+	GetCoffee() []Product
+	GetTea() []Product
 }
 
 func latencyFromEnv(key, fallback string) (time.Duration, error) {
@@ -170,6 +197,8 @@ func (cs *Server) ListenAndServe() error {
 	)
 	mux.Get("/products", cs.GetProducts)
 	mux.Get("/products/{productID}", cs.GetProduct)
+	mux.Get("/products/tea", cs.GetTea)
+	mux.Get("/products/coffee", cs.GetCoffee)
 	cs.HTTPServer.Handler = mux
 	return cs.HTTPServer.ListenAndServe()
 }
@@ -198,6 +227,40 @@ func (cs *Server) GetProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := json.Marshal(product)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(data)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+func (cs *Server) GetCoffee(w http.ResponseWriter, r *http.Request) {
+	products := cs.Store.GetCoffee()
+	if len(products) == 0 {
+		http.Error(w, "product not found", http.StatusNotFound)
+		return
+	}
+	data, err := json.MarshalIndent(products, "", "  ")
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(data)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+func (cs *Server) GetTea(w http.ResponseWriter, r *http.Request) {
+	products := cs.Store.GetTea()
+	if len(products) == 0 {
+		http.Error(w, "product not found", http.StatusNotFound)
+		return
+	}
+	data, err := json.MarshalIndent(products, "", "  ")
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -308,5 +371,25 @@ var inventory = map[string]Product{
 			{Name: "property", Value: "250 gram, Arabica"},
 			{Name: "intensity", Value: "Medium (6/10)"},
 		},
+	},
+
+	"7": {
+		ID:       "7",
+		Type:     "Tea",
+		Brand:    "Caykur",
+		Name:     "Green Tea",
+		Unit:     "gram",
+		Quantity: "150",
+		Price:    "4.99",
+	},
+
+	"8": {
+		ID:       "8",
+		Type:     "Tea",
+		Brand:    "Greeting Opine",
+		Name:     "Jasmin Tea",
+		Unit:     "gram",
+		Quantity: "250",
+		Price:    "7.49",
 	},
 }

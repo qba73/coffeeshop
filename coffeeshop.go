@@ -226,7 +226,7 @@ func (cs *Server) GetProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "product not found", http.StatusNotFound)
 		return
 	}
-	data, err := json.Marshal(product)
+	data, err := json.MarshalIndent(product, "", "  ")
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
